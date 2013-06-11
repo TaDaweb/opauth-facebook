@@ -12,9 +12,7 @@
  */
 namespace Opauth\Strategy\Facebook;
 
-use Opauth\AbstractStrategy;
-
-class Strategy extends AbstractStrategy {
+class Strategy extends \Opauth\Strategy\Oauth\Strategy {
 
 	/**
 	 * Compulsory config keys, listed as unassociative arrays
@@ -39,58 +37,20 @@ class Strategy extends AbstractStrategy {
 		'info.urls.website' => 'website'
 	);
 
-	/**
-	 * Auth request
-	 */
-	public function request() {
-		$url = 'https://www.facebook.com/dialog/oauth';
-		$strategyKeys = array(
-			'scope',
-			'state',
-			'response_type',
-			'display',
-			'auth_type',
-			'app_id' => 'client_id'
-		);
-		$params = $this->addParams($strategyKeys);
-		$params['redirect_uri'] = $this->callbackUrl();
-		$this->http->redirect($url, $params);
-	}
+	protected $requestUrl = 'https://www.facebook.com/dialog/oauth';
 
-	/**
-	 * Internal callback, after Facebook's OAuth
-	 */
-	public function callback() {
-		if (!array_key_exists('code', $_GET) || empty($_GET['code'])) {
-			return $this->codeError();
-		}
+	protected $requestParams = array(
+		'scope',
+		'state',
+		'response_type',
+		'display',
+		'auth_type',
+		'app_id' => 'client_id'
+	);
 
-		$url = 'https://graph.facebook.com/oauth/access_token';
-		$params = $this->callbackParams();
-		$response = $this->http->get($url, $params);
-		parse_str($response, $results);
+	protected $tokenUrl = 'https://graph.facebook.com/oauth/access_token';
 
-		if (empty($results['access_token'])) {
-			return $this->tokenError($response);
-		}
-
-		$me = $this->me($results['access_token']);
-		if (!$me) {
-			$error = array(
-				'code' => 'me_error',
-				'message' => 'Failed when attempting to query for user information'
-			);
-			return $this->response(null, $error);
-		}
-
-		$response = $this->response($me);
-		$response->credentials = array(
-			'token' => $results['access_token'],
-			'expires' => date('c', time() + $results['expires'])
-		);
-		$response->info['image'] = 'https://graph.facebook.com/'. $me['id'] . '/picture?type=square';
-		return $response;
-	}
+	protected $userUrl = 'https://graph.facebook.com/me';
 
 	/**
 	 * Helper method for callback()
@@ -98,54 +58,23 @@ class Strategy extends AbstractStrategy {
 	 * @return array Parameter array
 	 */
 	protected function callbackParams() {
-		$params = array(
-			'redirect_uri'=> $this->callbackUrl(),
-			'code' => trim($_GET['code'])
-		);
-		$strategyKeys = array(
+		return $this->addParams(array(
 			'app_id' => 'client_id',
 			'app_secret' => 'client_secret'
+		));
+	}
+
+	protected function accessToken($code) {
+		return $this->getToken($code);
+	}
+
+	protected function callbackResponse($response, $results) {
+		$response->credentials = array(
+			'token' => $results['access_token'],
+			'expires' => date('c', time() + $results['expires'])
 		);
-		return $this->addParams($strategyKeys, $params);
+		$response->info['image'] = 'https://graph.facebook.com/'. $response->raw['id'] . '/picture?type=square';
+		return $response;
 	}
 
-	/**
-	 *
-	 * @return type
-	 */
-	protected function codeError() {
-		$error = array(
-			'code' => $_GET['error'],
-			'message' => $_GET['error_description'],
-		);
-
-		return $this->response($_GET, $error);
-	}
-
-	/**
-	 *
-	 * @return returns
-	 */
-	protected function tokenError($raw) {
-		$error = array(
-			'code' => 'access_token_error',
-			'message' => 'Failed when attempting to obtain access token',
-		);
-
-		return $this->response($raw, $error);
-	}
-
-	/**
-	 * Queries Facebook Graph API for user info
-	 *
-	 * @param string $access_token
-	 * @return array Parsed JSON results
-	 */
-	protected function me($access_token) {
-		$me = $this->http->get('https://graph.facebook.com/me', array('access_token' => $access_token));
-		if (empty($me)) {
-			return false;
-		}
-		return $this->recursiveGetObjectVars(json_decode($me));
-	}
 }
