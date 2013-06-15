@@ -12,7 +12,7 @@
  */
 namespace Opauth\Strategy\Facebook;
 
-class Strategy extends \Opauth\Strategy\Oauth2\Strategy {
+class Strategy extends \Opauth\Strategy\OAuth2\Strategy {
 
 	/**
 	 * Compulsory config keys, listed as unassociative arrays
